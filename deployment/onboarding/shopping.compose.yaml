@@ -1,0 +1,9 @@
+# Merge with the EXISTING gateway Compose file. This is not a replacement stack.
+services:
+  caddy:
+    networks:
+      shopping: {}
+networks:
+  shopping:
+    external: true
+    name: shoppinglist-proxy

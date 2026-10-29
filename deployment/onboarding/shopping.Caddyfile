@@ -1,0 +1,10 @@
+# Add this site block to the existing shared gateway Caddyfile once.
+shopping.paulhiggins.cloud {
+    header {
+        -Server
+        Strict-Transport-Security "max-age=31536000"
+    }
+    reverse_proxy shoppinglist-web:8080 {
+        flush_interval -1
+    }
+}

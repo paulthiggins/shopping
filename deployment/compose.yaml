@@ -1,0 +1,58 @@
+name: shoppinglist
+services:
+  web:
+    image: local/shoppinglist-web:${RELEASE_ID:?Set RELEASE_ID}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks:
+      proxy:
+        aliases: [shoppinglist-web]
+      app: {}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8080/api/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging:
+      driver: local
+      options: { max-size: "10m", max-file: "3" }
+  api:
+    image: local/shoppinglist-api:${RELEASE_ID:?Set RELEASE_ID}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN}
+    volumes: [shopping_data:/data]
+    networks: [app]
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          'fetch("http://127.0.0.1:4181/healthz").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging:
+      driver: local
+      options: { max-size: "10m", max-file: "3" }
+networks:
+  proxy:
+    external: true
+    name: shoppinglist-proxy
+  app:
+    internal: true
+volumes:
+  shopping_data:
+    name: shoppinglist-data
