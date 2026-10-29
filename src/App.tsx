@@ -1,3 +1,4 @@
+import { parseToken } from "../shared/tokens";
 import { uuid } from "./platform";
 import {
   useEffect,
@@ -221,10 +222,7 @@ type Modal = {
 export default function App() {
   const [token, setToken] = useState(() => {
       const saved = localStorage.getItem("shopping-list-last") ?? "";
-      return (
-        tokenFromUrl() ||
-        (!location.hash && /^[a-zA-Z0-9_-]{43}$/.test(saved) ? saved : "")
-      );
+      return tokenFromUrl() || (!location.hash ? parseToken(saved) : "");
     }),
     local = useLocal(token),
     { connection, error: networkError } = useSync(token),
@@ -993,7 +991,7 @@ export default function App() {
       {modal?.type === "open" && (
         <Dialog title="Your shopping lists" close={() => setModal(null)}>
           <NameForm
-            label="Paste a shared list link"
+            label="Paste a shared list link or code"
             button="Open list"
             save={async (name) => {
               let value = name.trim();
@@ -1002,7 +1000,8 @@ export default function App() {
               } catch {
                 throw Error("Paste a valid list link.");
               }
-              if (!/^[a-zA-Z0-9_-]{43}$/.test(value))
+              value = parseToken(value.replace(/^#/, ""));
+              if (!value)
                 throw Error("This does not look like a shopping list link.");
               location.hash = value;
               setToken(value);

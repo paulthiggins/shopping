@@ -1,3 +1,4 @@
+import { generateToken, parseToken } from "../shared/tokens";
 import { connectLiveUpdates } from "./live-updates";
 import { uuid, syncLock } from "./platform";
 import Dexie, { liveQuery, type Table } from "dexie";
@@ -58,6 +59,15 @@ export function visible(local: Local): State {
     }
   return s;
 }
+export class RequestError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
 export async function request<T>(
   token: string,
   path: string,
@@ -76,21 +86,17 @@ export async function request<T>(
   });
   const value = await res.json();
   if (!res.ok)
-    throw Error(value.error ?? "The server could not save that change.");
+    throw new RequestError(
+      value.error ?? "The server could not save that change.",
+      res.status,
+      value.code,
+    );
   return value;
 }
 export function tokenFromUrl(): string {
-  const token = location.hash.slice(1);
-  return /^[a-zA-Z0-9_-]{43}$/.test(token) ? token : "";
+  return parseToken(location.hash.slice(1));
 }
-export function randomToken(): string {
-  return btoa(
-    String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))),
-  )
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replaceAll("=", "");
-}
+export const randomToken = generateToken;
 export async function createCollection(backup?: unknown): Promise<string> {
   // Keep the credential + request identifier before sending so an interrupted creation is retryable.
   const fingerprint = JSON.stringify(backup ?? null);
@@ -109,11 +115,23 @@ export async function createCollection(backup?: unknown): Promise<string> {
     creation = { token: randomToken(), requestId: uuid(), backup };
     localStorage.setItem("shopping-list-creation", JSON.stringify(creation));
   }
-  const { state } = await request<{ state: State }>(
-    "",
-    "collections",
-    creation,
-  );
+  const create = async () => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        return await request<{ state: State }>("", "collections", creation);
+      } catch (error) {
+        if (!(error instanceof RequestError) || error.code !== "token_taken")
+          throw error;
+        creation!.token = randomToken();
+        localStorage.setItem(
+          "shopping-list-creation",
+          JSON.stringify(creation),
+        );
+      }
+    }
+    throw Error("Could not allocate a list code. Please try again.");
+  };
+  const { state } = await create();
   await db.lists.put({
     token: creation.token,
     confirmed: state,

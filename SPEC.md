@@ -108,7 +108,7 @@ Each row contains a visually obvious drag handle, item name, minus button, integ
 
 ## 4. Sharing, access and privacy
 
-As confirmed in D1, a link such as `https://shopping.paulhiggins.cloud/#LONG_RANDOM_TOKEN` identifies and grants access to one collection. The short example token in the request illustrates the shape only; production tokens must be cryptographically random with at least 128 bits of entropy (prefer 32 random bytes, base64url encoded).
+Updated decision (2026-10-29): a link such as `https://shopping.paulhiggins.cloud/#k7m-4rt-9wx` identifies and grants access to one collection. New codes contain nine cryptographically random characters grouped in threes, excluding `0`, `1`, `i`, `l` and `o`. The user accepted reduced guessing resistance for easier sharing (about 44.6 bits of randomness). Keep existing long credentials working; apply request/creation and failed-authentication rate limits and retry allocation collisions without revealing existing lists. Existing lists retain their original links; no credential migration is performed.
 
 - Anyone holding the link can read and edit all shops and history in that collection. No user registration, password or attribution is needed for v1.
 - The fragment is not automatically included in HTTP requests. The client reads it and explicitly authenticates same-origin API/event requests using it. It is an access credential, not an encryption key.

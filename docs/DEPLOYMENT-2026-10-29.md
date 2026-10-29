@@ -1,7 +1,8 @@
 # Live sync update — 29 October 2026
 
 Production: **https://shopping.paulhiggins.cloud/**
-Current release: `20261029T000855Z`.
+Release described here: `20261029T000855Z`.
+Superseded by [friendly sharing codes, release `20261029T002921Z`](DEPLOYMENT-FRIENDLY-CODES-2026-10-29.md).
 Previous release: `20261028T204025Z`.
 Infrastructure and original installation: [28 October deployment record](DEPLOYMENT-2026-10-28.md).
 

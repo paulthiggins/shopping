@@ -74,3 +74,56 @@ it("streams committed revisions without credentials in the stream URL", async ()
   abort.abort();
   await reader.cancel().catch(() => {});
 });
+
+it("keeps legacy links working and handles allocation collisions without exposing a list", async () => {
+  const { store, base } = await setup();
+  const legacy = "AbC_" + "x".repeat(39);
+  const original = store.create(legacy, randomUUID());
+  expect(
+    (
+      await fetch(base + "/api/state", {
+        headers: { Authorization: `Bearer ${legacy}` },
+      })
+    ).status,
+  ).toBe(200);
+  const token = newToken();
+  store.create(token, randomUUID());
+  const requestId = randomUUID();
+  const post = (code: string) =>
+    fetch(base + "/api/collections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: code, requestId }),
+    });
+  const collision = await post(token);
+  expect(collision.status).toBe(409);
+  expect(await collision.json()).toEqual({
+    code: "token_taken",
+    error: expect.any(String),
+  });
+  const retry = await post(newToken());
+  expect(retry.status).toBe(201);
+  expect(store.find(legacy)?.state).toEqual(original);
+});
+it("limits failed code guesses across endpoints and ignores spoofed forwarding headers", async () => {
+  const { base, store } = await setup();
+  const token = newToken();
+  store.create(token, randomUUID());
+  for (let i = 0; i < 30; i++) {
+    expect(
+      (
+        await fetch(base + (i % 2 ? "/api/state" : "/api/events"), {
+          headers: {
+            Authorization: "Bearer aaa-aaa-aaa",
+            "X-Forwarded-For": `192.0.2.${i}`,
+          },
+        })
+      ).status,
+    ).toBe(404);
+  }
+  const blocked = await fetch(base + "/api/state", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(blocked.status).toBe(429);
+  expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
+});

@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
@@ -12,6 +12,8 @@ import {
   type Command,
   type Result,
 } from "../shared/model.ts";
+import { generateToken, validToken } from "../shared/tokens.ts";
+export class TokenTaken extends Conflict {}
 export const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 export class Store {
@@ -34,7 +36,7 @@ export class Store {
       throw Error("Unsupported database version.");
   }
   find(token: string): { id: string; state: State } | null {
-    if (!/^[a-zA-Z0-9_-]{43}$/.test(token)) return null;
+    if (!validToken(token)) return null;
     const row = this.db
       .prepare("SELECT id,document FROM collections WHERE token_hash=?")
       .get(digest(token));
@@ -43,8 +45,7 @@ export class Store {
       : null;
   }
   create(token: string, requestId: string, backup?: unknown): State {
-    if (!/^[a-zA-Z0-9_-]{43}$/.test(token))
-      throw new Conflict("Invalid list credential.");
+    if (!validToken(token)) throw new Conflict("Invalid list credential.");
     identifier(requestId);
     const requestHash = digest(requestId),
       payloadHash = digest(JSON.stringify({ token, backup: backup ?? null }));
@@ -63,6 +64,8 @@ export class Store {
         this.db.exec("COMMIT");
         return existing.state;
       }
+      if (this.find(token))
+        throw new TokenTaken("List code already in use. Please try another.");
       const epoch = randomUUID();
       const state =
         backup === undefined
@@ -145,4 +148,4 @@ export class Store {
     this.db.close();
   }
 }
-export const newToken = () => randomBytes(32).toString("base64url");
+export const newToken = generateToken;

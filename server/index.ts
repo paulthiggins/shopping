@@ -6,7 +6,7 @@ import {
 import { readFile } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Store, digest } from "./store.ts";
+import { Store, digest, TokenTaken } from "./store.ts";
 import { Conflict, type Command } from "../shared/model.ts";
 const MAX_BODY = 5 * 1024 * 1024;
 async function body(req: IncomingMessage): Promise<unknown> {
@@ -47,6 +47,9 @@ export function makeServer(
 ) {
   const streams = new Map<string, Set<ServerResponse>>();
   const limits = new Map<string, { count: number; until: number }>();
+  // Use the socket peer, never client-supplied forwarding headers. Behind the
+  // bundled proxy this is a shared failure budget; successful requests do not consume it.
+  const failedAuth = new Map<string, { count: number; until: number }>();
   const server = createServer(async (req, res) => {
     try {
       Object.entries(headers).forEach(([k, v]) => res.setHeader(k, v));
@@ -101,12 +104,27 @@ export function makeServer(
           json(res, 201, { state });
           return;
         }
+        const failure = failedAuth.get(ip);
+        if (failure && failure.until > now && failure.count >= 30) {
+          res.setHeader(
+            "Retry-After",
+            String(Math.ceil((failure.until - now) / 1000)),
+          );
+          json(res, 429, {
+            error: "Too many invalid list codes. Please wait a minute.",
+          });
+          return;
+        }
         const token =
-          req.headers.authorization?.match(
-            /^Bearer ([a-zA-Z0-9_-]{43})$/,
-          )?.[1] ?? "";
+          req.headers.authorization?.match(/^Bearer ([a-zA-Z0-9_-]+)$/)?.[1] ??
+          "";
         const collection = store.find(token);
         if (!collection) {
+          if (failure && failure.until > now) failure.count++;
+          else failedAuth.set(ip, { count: 1, until: now + 60_000 });
+          if (failedAuth.size > 10000)
+            for (const [key, entry] of failedAuth)
+              if (entry.until <= now) failedAuth.delete(key);
           json(res, 404, { error: "This list link is not valid." });
           return;
         }
@@ -207,12 +225,17 @@ export function makeServer(
       }
     } catch (e) {
       if (!res.headersSent)
-        json(res, e instanceof Conflict ? 400 : 500, {
-          error:
-            e instanceof Conflict
-              ? e.message
-              : "Unable to complete that request.",
-        });
+        json(
+          res,
+          e instanceof TokenTaken ? 409 : e instanceof Conflict ? 400 : 500,
+          {
+            ...(e instanceof TokenTaken ? { code: "token_taken" } : {}),
+            error:
+              e instanceof Conflict
+                ? e.message
+                : "Unable to complete that request.",
+          },
+        );
       else res.end();
     }
   });

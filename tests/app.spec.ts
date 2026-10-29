@@ -522,3 +522,54 @@ test("only the item list scrolls while shop buttons and entry stay fixed", async
     fullPage: true,
   });
 });
+
+test("short codes retry collisions and open from typed uppercase codes", async ({
+  page,
+  browser,
+}) => {
+  const attempts: string[] = [];
+  await page.route("**/api/collections", async (route) => {
+    attempts.push(route.request().postDataJSON().token);
+    if (attempts.length === 1) {
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ code: "token_taken", error: "Code in use" }),
+      });
+    } else await route.continue();
+  });
+  await create(page);
+  expect(attempts).toHaveLength(2);
+  expect(attempts[1]).not.toBe(attempts[0]);
+  const token = new URL(page.url()).hash.slice(1);
+  expect(token).toMatch(
+    /^[23456789abcdefghjkmnpqrstuvwxyz]{3}(-[23456789abcdefghjkmnpqrstuvwxyz]{3}){2}$/,
+  );
+  await add(page, "Shared code test");
+  await saved(page);
+  const context = await browser.newContext();
+  try {
+    const other = await context.newPage();
+    await other.goto("/");
+    await menuAction(other, "Open a list");
+    await other
+      .getByLabel("Paste a shared list link or code", { exact: true })
+      .fill(token.replaceAll("-", "").toUpperCase());
+    await other.getByRole("button", { name: "Open list", exact: true }).click();
+    await expect(
+      other.getByRole("button", {
+        name: "Increase Shared code test",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await other.reload();
+    await expect(
+      other.getByRole("button", {
+        name: "Increase Shared code test",
+        exact: true,
+      }),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});

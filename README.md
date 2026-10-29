@@ -37,6 +37,7 @@ The main shopping screen has only shop buttons and a hamburger menu at the top, 
 - Drag the dotted handle to reorder. The row's **More actions** menu also has keyboard-accessible move actions.
 - Swipe right for Edit; left for Remove & forget. Swiping only reveals a button. The actions menu offers the same functionality without swiping.
 - **Delete** removes one row but retains its suggestion. **Remove & forget** also suppresses the name in shared autocomplete. Other shops' rows remain. Explicitly adding the name again remembers it.
+- New lists use short random sharing codes such as `k7m-4rt-9wx`, avoiding `0`, `1`, `i`, `l` and `o`. Existing long links still work. Open a list using its link or code; short codes also accept uppercase or omitted hyphens. Short codes trade some privacy for convenience.
 - **Share list** copies a link to all shops and their history. Anyone holding it can read/edit. No login or read-only role exists. The link is an access credential; keep it somewhere safe.
 - Live sharing uses SSE notifications. Healthy idle connections do not poll for snapshots. A five-second foreground fallback runs only when SSE is unavailable and stops after reconnection. Failed saves retry independently.
 - Offline edits persist on the device, then sync. Open Menu → Sync status to inspect pending/conflicting changes. Conflicts retain their command/draft and support reapply/discard. Do not clear site data while changes are pending.
